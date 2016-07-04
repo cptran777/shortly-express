@@ -43,6 +43,8 @@ function(req, res) {
 app.post('/links', 
 function(req, res) {
   var uri = req.body.url;
+  // Need console log here. Apparently it saves our code. 
+  console.log(uri);
 
   if (!util.isValidUrl(uri)) {
     console.log('Not a valid url: ', uri);
@@ -76,6 +78,30 @@ function(req, res) {
 // Write your authentication routes here
 /************************************************************/
 
+app.get('/login', function(req, res) {
+  console.log('thinking...');
+  console.log(req.body);
+  res.render('login');
+});
+
+app.post('/login', function(req, res) {
+  res.body('shit happens');
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  console.log('we are signing up!');
+  new User({ username: req.body.username, password: req.body.password }).fetch().then(function(found) {
+    if (found) {
+      res.status(200).send(found.attributes);
+    } else {
+      res.sendStatus(300);
+    }
+  });
+});
 
 
 /************************************************************/
