@@ -55,12 +55,12 @@ var restrict = function (req, res, next) {
 app.get('/',
 function(req, res) {
   console.log('req.session.username: ', req.session.user);
-  res.render('index');
+  req.session.user ? res.render('index') : res.redirect('/login');
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  req.session.user ? res.render('index') : res.redirect('/login');
 });
 
 app.get('/links', 
@@ -125,7 +125,7 @@ app.post('/login', function(req, res) {
         req.session.user = username;
         res.redirect('/');
       } else {
-        console.log('login invalid: ', myUser);
+        console.log('login invalid:  ', myUser);
         res.redirect('/login');
       }      
     }
