@@ -2,7 +2,8 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-
+var session = require('express-session');
+var cookieParser = require('cookie-parser');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -22,9 +23,38 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+app.use(cookieParser('shhhh, very secret'));
+app.use(function (req, res, next) {
+  // check if client sent cookie
+  var cookie = req.cookies.cookieName;
+  if (cookie === undefined) {
+    // no: set a new cookie
+    var randomNumber = Math.random().toString();
+    randomNumber = randomNumber.substring(2, randomNumber.length);
+    res.cookie('cookieName', randomNumber, { maxAge: 900000, httpOnly: true });
+  } else {
+    // yes, cookie was already present 
+    // console.log('cookie exists', cookie);
+  } 
+  next(); // <-- important!
+});
 
-app.get('/', 
+app.use(session());
+ 
+ 
+var restrict = function (req, res, next) {
+  if (req.session.user) {
+    next();
+  } else {
+    req.session.error = 'Access denied!';
+    res.redirect('/login');
+  }
+};
+
+
+app.get('/',
 function(req, res) {
+  console.log('req.session.username: ', req.session.user);
   res.render('index');
 });
 
@@ -43,8 +73,8 @@ function(req, res) {
 app.post('/links', 
 function(req, res) {
   var uri = req.body.url;
-  // Need console log here. Apparently it saves our code. 
-  console.log(uri);
+  // // Need console log here. Apparently it saves our code. 
+  // console.log(uri);
 
   if (!util.isValidUrl(uri)) {
     console.log('Not a valid url: ', uri);
@@ -85,16 +115,22 @@ app.get('/login', function(req, res) {
 app.post('/login', function(req, res) {
   var username = req.body.username;
   var password = req.body.password;
-  var myUser = Users.find(function (user) {
-    return user.get('username') === username;
+  Users.fetch().then(function(found) {
+    if (found) {
+      var myUser = Users.find(function (user) {
+        return user.get('username') === username;
+      });
+      
+      if (myUser && myUser.validate(password)) {
+        req.session.user = username;
+        res.redirect('/');
+      } else {
+        console.log('login invalid: ', myUser);
+        res.redirect('/login');
+      }      
+    }
   });
-  
-  if (myUser && myUser.validate(password)) {
-    res.redirect('/');
-  } else {
-    res.redirect('/login');
-  }
-  
+
 });
 
 app.get('/signup', function(req, res) {
