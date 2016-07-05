@@ -2,8 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-var sessions = require("client-sessions");
-var session = require('express-session');
+var sessions = require('client-sessions');
 var cookieParser = require('cookie-parser');
 
 var db = require('./app/config');
@@ -146,6 +145,10 @@ app.post('/signup', function(req, res) {
   });
 });
 
+app.get('/logout', function(req, res) {
+  req.mySession.destroy();
+  res.redirect('login');
+});
 
 /************************************************************/
 // Handle the wildcard route last - if all other routes fail
