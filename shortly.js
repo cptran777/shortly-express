@@ -79,13 +79,22 @@ function(req, res) {
 /************************************************************/
 
 app.get('/login', function(req, res) {
-  console.log('thinking...');
-  console.log(req.body);
   res.render('login');
 });
 
 app.post('/login', function(req, res) {
-  res.body('shit happens');
+  var username = req.body.username;
+  var password = req.body.password;
+  var myUser = Users.find(function (user) {
+    return user.get('username') === username;
+  });
+  
+  if (myUser && myUser.validate(password)) {
+    res.redirect('/');
+  } else {
+    res.redirect('/login');
+  }
+  
 });
 
 app.get('/signup', function(req, res) {
@@ -93,14 +102,12 @@ app.get('/signup', function(req, res) {
 });
 
 app.post('/signup', function(req, res) {
-  console.log('we are signing up!');
   var myUser = new User({ username: req.body.username, password: req.body.password });
+  Users.add(myUser);
   myUser.save();
   myUser.fetch().then(function(found) {
     if (found) {
       console.log('found');
-      console.log('multiple choices?', found.attributes);
-      res.status(200);
       res.redirect('/');
     } else {
       console.log('not found, i guess...');
