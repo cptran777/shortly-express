@@ -94,11 +94,17 @@ app.get('/signup', function(req, res) {
 
 app.post('/signup', function(req, res) {
   console.log('we are signing up!');
-  new User({ username: req.body.username, password: req.body.password }).fetch().then(function(found) {
+  var myUser = new User({ username: req.body.username, password: req.body.password });
+  myUser.save();
+  myUser.fetch().then(function(found) {
     if (found) {
-      res.status(200).send(found.attributes);
+      console.log('found');
+      console.log('multiple choices?', found.attributes);
+      res.status(200);
+      res.redirect('/');
     } else {
-      res.sendStatus(300);
+      console.log('not found, i guess...');
+      res.sendStatus(404);
     }
   });
 });
