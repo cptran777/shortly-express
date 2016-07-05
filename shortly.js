@@ -2,6 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var sessions = require("client-sessions");
 var session = require('express-session');
 var cookieParser = require('cookie-parser');
 
@@ -14,53 +15,45 @@ var Click = require('./app/models/click');
 
 var app = express();
 
+//Views
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(partials());
+
 // Parse JSON (uniform resource locators)
 app.use(bodyParser.json());
+
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
-app.use(cookieParser('shhhh, very secret'));
-app.use(function (req, res, next) {
-  // check if client sent cookie
-  var cookie = req.cookies.cookieName;
-  if (cookie === undefined) {
-    // no: set a new cookie
-    var randomNumber = Math.random().toString();
-    randomNumber = randomNumber.substring(2, randomNumber.length);
-    res.cookie('cookieName', randomNumber, { maxAge: 900000, httpOnly: true });
-  } else {
-    // yes, cookie was already present 
-    // console.log('cookie exists', cookie);
-  } 
-  next(); // <-- important!
-});
+app.use(sessions({
+  cookieName: 'mySession', // cookie name dictates the key name added to the request object
+  secret: 'blargadeeblargblarg', // should be a large unguessable string
+  duration: 24 * 60 * 60 * 1000, // how long the session will stay valid in ms
+  activeDuration: 1000 * 60 * 5 // if expiresIn < activeDuration, the session will be extended by activeDuration milliseconds
+}));
 
-app.use(session());
- 
- 
-var restrict = function (req, res, next) {
-  if (req.session.user) {
+var verify = function(req, res, next) {
+  if (req.mySession.user) {
+    res.setHeader('X-Seen-You', 'true');
     next();
   } else {
-    req.session.error = 'Access denied!';
+    // setting a property will automatically cause a Set-Cookie response
+    // to be sent
+    res.setHeader('X-Seen-You', 'false');
     res.redirect('/login');
   }
 };
 
-
-app.get('/',
+app.get('/', verify, 
 function(req, res) {
-  console.log('req.session.username: ', req.session.user);
-  req.session.user ? res.render('index') : res.redirect('/login');
+  res.render('index');
 });
 
-app.get('/create', 
+app.get('/create', verify,
 function(req, res) {
-  req.session.user ? res.render('index') : res.redirect('/login');
+  res.render('index');
 });
 
 app.get('/links', 
@@ -73,8 +66,8 @@ function(req, res) {
 app.post('/links', 
 function(req, res) {
   var uri = req.body.url;
-  // // Need console log here. Apparently it saves our code. 
-  // console.log(uri);
+  // Need console log here. Apparently it saves our code. 
+  console.log(uri);
 
   if (!util.isValidUrl(uri)) {
     console.log('Not a valid url: ', uri);
@@ -115,17 +108,17 @@ app.get('/login', function(req, res) {
 app.post('/login', function(req, res) {
   var username = req.body.username;
   var password = req.body.password;
+  
   Users.fetch().then(function(found) {
     if (found) {
       var myUser = Users.find(function (user) {
         return user.get('username') === username;
       });
-      
+
       if (myUser && myUser.validate(password)) {
-        req.session.user = username;
+        req.mySession.user = username;
         res.redirect('/');
       } else {
-        console.log('login invalid:  ', myUser);
         res.redirect('/login');
       }      
     }
@@ -140,15 +133,16 @@ app.get('/signup', function(req, res) {
 app.post('/signup', function(req, res) {
   var myUser = new User({ username: req.body.username, password: req.body.password });
   Users.add(myUser);
-  myUser.save();
-  myUser.fetch().then(function(found) {
-    if (found) {
-      console.log('found');
-      res.redirect('/');
-    } else {
-      console.log('not found, i guess...');
-      res.sendStatus(404);
-    }
+  myUser.save().then(function() {
+    myUser.fetch().then(function(found) {
+      if (found) {
+        console.log('found');
+        res.redirect('/login');
+      } else {
+        console.log('not found, i guess...');
+        res.sendStatus(404);
+      }
+    });
   });
 });
 
