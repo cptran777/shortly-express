@@ -2,12 +2,14 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-var sessions = require('client-sessions');
 var cookieParser = require('cookie-parser');
+var passport = require('passport');
+var GitHubStrategy = require('passport-github').Strategy;
+var session = require('express-session');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
-var User = require('./app/models/user');
+var mUser = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
@@ -26,31 +28,50 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
-app.use(sessions({
-  cookieName: 'mySession', // cookie name dictates the key name added to the request object
-  secret: 'blargadeeblargblarg', // should be a large unguessable string
-  duration: 24 * 60 * 60 * 1000, // how long the session will stay valid in ms
-  activeDuration: 1000 * 60 * 5 // if expiresIn < activeDuration, the session will be extended by activeDuration milliseconds
-}));
+passport.use(new GitHubStrategy({
+  clientID: '0dd66e8e1e56bf89f7ff',
+  clientSecret: 'beab57516d283d7113c4dd9597bbc6fbc66bde3b',
+  callbackURL: 'http://localhost:4568/auth/github/callback'
+},
+function(accessToken, refreshToken, profile, done) {
+  return done(null, profile);
+}
+));
 
-var verify = function(req, res, next) {
-  if (req.mySession.user) {
-    res.setHeader('X-Seen-You', 'true');
-    next();
-  } else {
-    // setting a property will automatically cause a Set-Cookie response
-    // to be sent
-    res.setHeader('X-Seen-You', 'false');
-    res.redirect('/login');
-  }
+app.use(session({secret: 'beab57516d283d7113c4dd9597bbc6fbc66bde3b'}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+var ensureAuth = function (req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  } 
+  res.redirect('/auth/github');
 };
 
-app.get('/', verify, 
+app.get('/auth/github', passport.authenticate('github'));
+app.get('/auth/github/callback', passport.authenticate('github', { failureRedirect: '/login'}), 
+  function (req, res) {
+    res.redirect('/');
+    console.log('we are here');
+  });
+
+app.get('/', ensureAuth,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/create', verify,
+app.get('/create',
 function(req, res) {
   res.render('index');
 });
@@ -114,16 +135,11 @@ app.post('/login', function(req, res) {
         return user.get('username') === username;
       });
 
-      if (myUser) {
-        myUser.validate(password, function(err, result) {
-          if (result) {
-            req.mySession.user = username;
-            res.redirect('/');
-          } else {
-            res.redirect('/login');
-          }
-        });
-      }   
+      if (myUser && myUser.validate(password)) {
+        res.redirect('/');
+      } else {
+        res.redirect('/login');
+      }      
     }
   });
 
@@ -134,13 +150,15 @@ app.get('/signup', function(req, res) {
 });
 
 app.post('/signup', function(req, res) {
-  new User({ username: req.body.username, password: req.body.password }).save().then(function(model) {
-    console.log('model: ', model);
-    Users.add(model);
-    new User({username: req.body.username}).fetch().then(function(found) {
+  var myUser = new mUser({ username: req.body.username, password: req.body.password });
+  Users.add(myUser);
+  myUser.save().then(function() {
+    myUser.fetch().then(function(found) {
       if (found) {
+        console.log('found');
         res.redirect('/login');
       } else {
+        console.log('not found, i guess...');
         res.sendStatus(404);
       }
     });
@@ -148,7 +166,7 @@ app.post('/signup', function(req, res) {
 });
 
 app.get('/logout', function(req, res) {
-  req.mySession.destroy();
+  req.logout();
   res.redirect('login');
 });
 

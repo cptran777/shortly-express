@@ -6,18 +6,29 @@ var User = db.Model.extend({
   tableName: 'users',
   hasTimestamps: true,
   initialize: function() {
-    
-    this.on('creating', function(model, attr, options) {
-      var salt = bcrypt.genSaltSync(10);
-      var hash = bcrypt.hashSync(this.get('password'), salt);
-      var hash = bcrypt.hashSync(this.get('password'));
-      this.set('password', hash);
-      this.set('pepper', salt);    
-    });
-    
+    var self = this; 
+
+    self.on('creating', function(model, attr, options) {
+      return new Promise (function(resolve, reject) {
+        bcrypt.genSalt(10, function(err, theSalt) {
+          self.set('pepper', theSalt);
+          bcrypt.hash(self.get('password'), theSalt, null, function(err, theHash) {
+            if (err) {
+              reject(err);
+            }
+            self.set('password', theHash);
+            resolve(theHash);
+          });
+        });  
+      });
+        
+    }, self);
+
   },
-  validate: function(pw) {
-    return bcrypt.compareSync(pw, this.get('password'));
+  validate: function(pw, callback) {
+    bcrypt.compare(pw, this.get('password'), function(err, result) {
+      err ? callback(err, null) : callback(null, result);
+    });
   }
 });
 
